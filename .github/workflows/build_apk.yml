@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Signed AAB
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
       - name: Patch AndroidManifest permissions
         run: |
           python3 -c "
-          import re, sys
+          import re
           with open('freshapp/android/app/src/main/AndroidManifest.xml') as f: c = f.read()
           perms = '<uses-permission android:name=\"android.permission.READ_CONTACTS\"/>\n    <uses-permission android:name=\"android.permission.CALL_PHONE\"/>\n    <uses-permission android:name=\"android.permission.READ_PHONE_STATE\"/>\n    <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\"/>\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\"/>\n    <uses-permission android:name=\"android.permission.INTERNET\"/>\n    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>\n    '
           fp = '<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"\${applicationId}.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\"/></provider>'
@@ -65,24 +65,34 @@ jobs:
       - name: Write pubspec.yaml
         run: echo "bmFtZTogdG1fYXV0b19jYWxsZXIKZGVzY3JpcHRpb246IFRNIEF1dG8gQ2FsbGVyIHY0CnZlcnNpb246IDQuMC4wKzQKCmVudmlyb25tZW50OgogIHNkazogIj49My4wLjAgPDQuMC4wIgoKZGVwZW5kZW5jaWVzOgogIGZsdXR0ZXI6CiAgICBzZGs6IGZsdXR0ZXIKICBmbHV0dGVyX2NvbnRhY3RzOiBeMS4xLjkrMgogIHVybF9sYXVuY2hlcjogXjYuMi4wCiAgcGVybWlzc2lvbl9oYW5kbGVyOiBeMTAuNC41CiAgc3FmbGl0ZTogXjIuMy4wCiAgcGF0aDogXjEuOC4zCiAgcHJvdmlkZXI6IF42LjAuNQogIGV4Y2VsOiBeNC4wLjYKICBzaGFyZV9wbHVzOiBeOS4wLjAKICBwYXRoX3Byb3ZpZGVyOiBeMi4xLjEKICBjb25uZWN0aXZpdHlfcGx1czogXjUuMC4yCgpkZXZfZGVwZW5kZW5jaWVzOgogIGZsdXR0ZXJfdGVzdDoKICAgIHNkazogZmx1dHRlcgogIGZsdXR0ZXJfbGludHM6IF4zLjAuMAoKZmx1dHRlcjoKICB1c2VzLW1hdGVyaWFsLWRlc2lnbjogdHJ1ZQo=" | base64 -d > freshapp/pubspec.yaml
 
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > freshapp/android/app/tm_auto_caller.jks
+
+      - name: Write key.properties
+        run: printf 'storePassword=${{ secrets.KEY_STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=${{ secrets.KEY_ALIAS }}\nstoreFile=tm_auto_caller.jks\n' > freshapp/android/key.properties
+
+      - name: Patch build.gradle for signing
+        run: |
+          python3 -c "
+          gradle = open('freshapp/android/app/build.gradle').read()
+          signing_block = '\n    signingConfigs {\n        release {\n            def props = new Properties()\n            props.load(new FileInputStream(rootProject.file(\"key.properties\")))\n            keyAlias props[\"keyAlias\"]\n            keyPassword props[\"keyPassword\"]\n            storeFile file(props[\"storeFile\"])\n            storePassword props[\"storePassword\"]\n        }\n    }\n'
+          gradle = gradle.replace('buildTypes {', signing_block + '    buildTypes {')
+          gradle = gradle.replace('release {', 'release {\n            signingConfig signingConfigs.release')
+          open('freshapp/android/app/build.gradle', 'w').write(gradle)
+          print('build.gradle signed OK')
+          "
+
       - name: Flutter pub get
         working-directory: freshapp
         run: flutter pub get
 
-      - name: Build release AAB
+      - name: Build signed AAB
         working-directory: freshapp
         run: flutter build appbundle --release
 
-      - name: Upload AAB
+      - name: Upload signed AAB
         uses: actions/upload-artifact@v4
         with:
-          name: TM-AutoCaller-v4-AAB
+          name: TM-AutoCaller-v4-Signed-AAB
           path: freshapp/build/app/outputs/bundle/release/app-release.aab
-          retention-days: 30
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: TM-AutoCaller-v4
-          path: freshapp/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30

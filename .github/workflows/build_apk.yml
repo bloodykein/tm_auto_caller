@@ -1,10 +1,8 @@
 name: Build Signed AAB
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,15 +21,16 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.27.4'
           channel: stable
 
-      - name: Install Android SDK Platform 35
+      - name: Fix Android SDK Platform 35
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-35" \
-            "build-tools;35.0.0" || true
-          echo "SDK 35 설치 완료"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --uninstall "platforms;android-35" 2>/dev/null || true
+          rm -rf $ANDROID_HOME/platforms/android-35 2>/dev/null || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          ls -lh $ANDROID_HOME/platforms/android-35/android.jar
 
       - name: Create Flutter scaffold
         run: flutter create --org com.tmapp --project-name tm_auto_caller --platforms android freshapp
@@ -56,18 +55,7 @@ jobs:
           printf '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n  <external-path name="external_files" path="."/>\n  <cache-path name="cache" path="."/>\n</paths>\n' > freshapp/android/app/src/main/res/xml/file_paths.xml
 
       - name: Patch AndroidManifest permissions
-        run: |
-          python3 -c "
-          import re
-          with open('freshapp/android/app/src/main/AndroidManifest.xml') as f: c = f.read()
-          perms = '<uses-permission android:name=\"android.permission.READ_CONTACTS\"/>\n    <uses-permission android:name=\"android.permission.CALL_PHONE\"/>\n    <uses-permission android:name=\"android.permission.READ_PHONE_STATE\"/>\n    <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\"/>\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\"/>\n    <uses-permission android:name=\"android.permission.INTERNET\"/>\n    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>\n    '
-          fp = '<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"\${applicationId}.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\"/></provider>'
-          c = c.replace('<application', perms + '<application', 1)
-          c = c.replace('</application>', fp + '</application>', 1)
-          c = re.sub(r'android:label=\"[^\"]*\"', 'android:label=\"TM AutoCaller\"', c)
-          with open('freshapp/android/app/src/main/AndroidManifest.xml', 'w') as f: f.write(c)
-          print('Manifest patched OK')
-          "
+        run: echo "aW1wb3J0IHJlCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvc3JjL21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCcpIGFzIGY6CiAgICBjID0gZi5yZWFkKCkKcGVybXMgPSAoCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRUFEX0NPTlRBQ1RTIi8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uQ0FMTF9QSE9ORSIvPlxuICAgICcKICAgICc8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQURfUEhPTkVfU1RBVEUiLz5cbiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5XUklURV9FWFRFUk5BTF9TVE9SQUdFIiBhbmRyb2lkOm1heFNka1ZlcnNpb249IjI4Ii8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUkVBRF9FWFRFUk5BTF9TVE9SQUdFIiBhbmRyb2lkOm1heFNka1ZlcnNpb249IjMyIi8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uSU5URVJORVQiLz5cbiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5BQ0NFU1NfTkVUV09SS19TVEFURSIvPlxuICAgICcKKQpmcCA9ICgnPHByb3ZpZGVyIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZHguY29yZS5jb250ZW50LkZpbGVQcm92aWRlciIgJwogICAgICAnYW5kcm9pZDphdXRob3JpdGllcz0iJHthcHBsaWNhdGlvbklkfS5maWxlcHJvdmlkZXIiICcKICAgICAgJ2FuZHJvaWQ6ZXhwb3J0ZWQ9ImZhbHNlIiBhbmRyb2lkOmdyYW50VXJpUGVybWlzc2lvbnM9InRydWUiPicKICAgICAgJzxtZXRhLWRhdGEgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnN1cHBvcnQuRklMRV9QUk9WSURFUl9QQVRIUyIgJwogICAgICAnYW5kcm9pZDpyZXNvdXJjZT0iQHhtbC9maWxlX3BhdGhzIi8+PC9wcm92aWRlcj4nKQpjID0gYy5yZXBsYWNlKCc8YXBwbGljYXRpb24nLCBwZXJtcyArICc8YXBwbGljYXRpb24nLCAxKQpjID0gYy5yZXBsYWNlKCc8L2FwcGxpY2F0aW9uPicsIGZwICsgJzwvYXBwbGljYXRpb24+JywgMSkKYyA9IHJlLnN1YihyJ2FuZHJvaWQ6bGFiZWw9IlteIl0qIicsICdhbmRyb2lkOmxhYmVsPSJUTSBBdXRvQ2FsbGVyIicsIGMpCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvc3JjL21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCcsICd3JykgYXMgZjoKICAgIGYud3JpdGUoYykKcHJpbnQoJ01hbmlmZXN0IHBhdGNoZWQgT0snKQo=" | base64 -d | python3
 
       - name: Write pubspec.yaml
         run: echo "bmFtZTogdG1fYXV0b19jYWxsZXIKZGVzY3JpcHRpb246IFRNIEF1dG8gQ2FsbGVyIHY0CnZlcnNpb246IDQuMC4wKzQKCmVudmlyb25tZW50OgogIHNkazogIj49My4wLjAgPDQuMC4wIgoKZGVwZW5kZW5jaWVzOgogIGZsdXR0ZXI6CiAgICBzZGs6IGZsdXR0ZXIKICBmbHV0dGVyX2NvbnRhY3RzOiBeMS4xLjkrMgogIHVybF9sYXVuY2hlcjogXjYuMi4wCiAgcGVybWlzc2lvbl9oYW5kbGVyOiBeMTAuNC41CiAgc3FmbGl0ZTogXjIuMy4wCiAgcGF0aDogXjEuOC4zCiAgcHJvdmlkZXI6IF42LjAuNQogIGV4Y2VsOiBeNC4wLjYKICBzaGFyZV9wbHVzOiBeOS4wLjAKICBwYXRoX3Byb3ZpZGVyOiBeMi4xLjEKICBjb25uZWN0aXZpdHlfcGx1czogXjUuMC4yCgpkZXZfZGVwZW5kZW5jaWVzOgogIGZsdXR0ZXJfdGVzdDoKICAgIHNkazogZmx1dHRlcgogIGZsdXR0ZXJfbGludHM6IF4zLjAuMAoKZmx1dHRlcjoKICB1c2VzLW1hdGVyaWFsLWRlc2lnbjogdHJ1ZQo=" | base64 -d > freshapp/pubspec.yaml
@@ -76,10 +64,11 @@ jobs:
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > freshapp/android/app/tm_auto_caller.jks
 
       - name: Write key.properties
-        run: printf 'storePassword=${{ secrets.KEY_STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=${{ secrets.KEY_ALIAS }}\nstoreFile=tm_auto_caller.jks\n' > freshapp/android/key.properties
+        run: |
+          printf 'storePassword=${{ secrets.KEY_STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=${{ secrets.KEY_ALIAS }}\nstoreFile=tm_auto_caller.jks\n' > freshapp/android/key.properties
 
       - name: Write build.gradle with signing
-        run: echo "cGx1Z2lucyB7CiAgICBpZCAiY29tLmFuZHJvaWQuYXBwbGljYXRpb24iCiAgICBpZCAia290bGluLWFuZHJvaWQiCiAgICBpZCAiZGV2LmZsdXR0ZXIuZmx1dHRlci1ncmFkbGUtcGx1Z2luIgp9CgpkZWYgbG9jYWxQcm9wZXJ0aWVzID0gbmV3IFByb3BlcnRpZXMoKQpkZWYgbG9jYWxQcm9wZXJ0aWVzRmlsZSA9IHJvb3RQcm9qZWN0LmZpbGUoJ2xvY2FsLnByb3BlcnRpZXMnKQppZiAobG9jYWxQcm9wZXJ0aWVzRmlsZS5leGlzdHMoKSkgewogICAgbG9jYWxQcm9wZXJ0aWVzRmlsZS53aXRoUmVhZGVyKCdVVEYtOCcpIHsgcmVhZGVyIC0+CiAgICAgICAgbG9jYWxQcm9wZXJ0aWVzLmxvYWQocmVhZGVyKQogICAgfQp9CgpkZWYgZmx1dHRlclZlcnNpb25Db2RlID0gbG9jYWxQcm9wZXJ0aWVzLmdldFByb3BlcnR5KCdmbHV0dGVyLnZlcnNpb25Db2RlJykKaWYgKGZsdXR0ZXJWZXJzaW9uQ29kZSA9PSBudWxsKSB7CiAgICBmbHV0dGVyVmVyc2lvbkNvZGUgPSAnMScKfQoKZGVmIGZsdXR0ZXJWZXJzaW9uTmFtZSA9IGxvY2FsUHJvcGVydGllcy5nZXRQcm9wZXJ0eSgnZmx1dHRlci52ZXJzaW9uTmFtZScpCmlmIChmbHV0dGVyVmVyc2lvbk5hbWUgPT0gbnVsbCkgewogICAgZmx1dHRlclZlcnNpb25OYW1lID0gJzEuMCcKfQoKZGVmIGtleXN0b3JlUHJvcGVydGllc0ZpbGUgPSByb290UHJvamVjdC5maWxlKCdrZXkucHJvcGVydGllcycpCmRlZiBrZXlzdG9yZVByb3BlcnRpZXMgPSBuZXcgUHJvcGVydGllcygpCmlmIChrZXlzdG9yZVByb3BlcnRpZXNGaWxlLmV4aXN0cygpKSB7CiAgICBrZXlzdG9yZVByb3BlcnRpZXMubG9hZChuZXcgRmlsZUlucHV0U3RyZWFtKGtleXN0b3JlUHJvcGVydGllc0ZpbGUpKQp9CgphbmRyb2lkIHsKICAgIG5hbWVzcGFjZSAiY29tLnRtYXBwLnRtX2F1dG9fY2FsbGVyIgogICAgY29tcGlsZVNkayAzNQogICAgbmRrVmVyc2lvbiBmbHV0dGVyLm5ka1ZlcnNpb24KCiAgICBjb21waWxlT3B0aW9ucyB7CiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOAogICAgICAgIHRhcmdldENvbXBhdGliaWxpdHkgSmF2YVZlcnNpb24uVkVSU0lPTl8xXzgKICAgIH0KCiAgICBrb3RsaW5PcHRpb25zIHsKICAgICAgICBqdm1UYXJnZXQgPSAnMS44JwogICAgfQoKICAgIHNvdXJjZVNldHMgewogICAgICAgIG1haW4uamF2YS5zcmNEaXJzICs9ICdzcmMvbWFpbi9rb3RsaW4nCiAgICB9CgogICAgZGVmYXVsdENvbmZpZyB7CiAgICAgICAgYXBwbGljYXRpb25JZCAiY29tLnRtYXBwLnRtX2F1dG9fY2FsbGVyIgogICAgICAgIG1pblNka1ZlcnNpb24gZmx1dHRlci5taW5TZGtWZXJzaW9uCiAgICAgICAgdGFyZ2V0U2RrVmVyc2lvbiAzNQogICAgICAgIHZlcnNpb25Db2RlIGZsdXR0ZXJWZXJzaW9uQ29kZS50b0ludGVnZXIoKQogICAgICAgIHZlcnNpb25OYW1lIGZsdXR0ZXJWZXJzaW9uTmFtZQogICAgfQoKICAgIHNpZ25pbmdDb25maWdzIHsKICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAga2V5QWxpYXMga2V5c3RvcmVQcm9wZXJ0aWVzWydrZXlBbGlhcyddCiAgICAgICAgICAgIGtleVBhc3N3b3JkIGtleXN0b3JlUHJvcGVydGllc1sna2V5UGFzc3dvcmQnXQogICAgICAgICAgICBzdG9yZUZpbGUga2V5c3RvcmVQcm9wZXJ0aWVzWydzdG9yZUZpbGUnXSA/IGZpbGUoa2V5c3RvcmVQcm9wZXJ0aWVzWydzdG9yZUZpbGUnXSkgOiBudWxsCiAgICAgICAgICAgIHN0b3JlUGFzc3dvcmQga2V5c3RvcmVQcm9wZXJ0aWVzWydzdG9yZVBhc3N3b3JkJ10KICAgICAgICB9CiAgICB9CgogICAgYnVpbGRUeXBlcyB7CiAgICAgICAgcmVsZWFzZSB7CiAgICAgICAgICAgIHNpZ25pbmdDb25maWcgc2lnbmluZ0NvbmZpZ3MucmVsZWFzZQogICAgICAgICAgICBtaW5pZnlFbmFibGVkIGZhbHNlCiAgICAgICAgICAgIHNocmlua1Jlc291cmNlcyBmYWxzZQogICAgICAgIH0KICAgIH0KfQoKZmx1dHRlciB7CiAgICBzb3VyY2UgJy4uLy4uJwp9Cg==" | base64 -d > freshapp/android/app/build.gradle
+        run: echo "Y29udGVudCA9ICIiInBsdWdpbnMgewogICAgaWQgImNvbS5hbmRyb2lkLmFwcGxpY2F0aW9uIgogICAgaWQgImtvdGxpbi1hbmRyb2lkIgogICAgaWQgImRldi5mbHV0dGVyLmZsdXR0ZXItZ3JhZGxlLXBsdWdpbiIKfQoKZGVmIGxvY2FsUHJvcGVydGllcyA9IG5ldyBQcm9wZXJ0aWVzKCkKZGVmIGxvY2FsUHJvcGVydGllc0ZpbGUgPSByb290UHJvamVjdC5maWxlKCdsb2NhbC5wcm9wZXJ0aWVzJykKaWYgKGxvY2FsUHJvcGVydGllc0ZpbGUuZXhpc3RzKCkpIHsKICAgIGxvY2FsUHJvcGVydGllc0ZpbGUud2l0aFJlYWRlcignVVRGLTgnKSB7IHJlYWRlciAtPgogICAgICAgIGxvY2FsUHJvcGVydGllcy5sb2FkKHJlYWRlcikKICAgIH0KfQoKZGVmIGZsdXR0ZXJWZXJzaW9uQ29kZSA9IGxvY2FsUHJvcGVydGllcy5nZXRQcm9wZXJ0eSgnZmx1dHRlci52ZXJzaW9uQ29kZScpCmlmIChmbHV0dGVyVmVyc2lvbkNvZGUgPT0gbnVsbCkgewogICAgZmx1dHRlclZlcnNpb25Db2RlID0gJzEnCn0KCmRlZiBmbHV0dGVyVmVyc2lvbk5hbWUgPSBsb2NhbFByb3BlcnRpZXMuZ2V0UHJvcGVydHkoJ2ZsdXR0ZXIudmVyc2lvbk5hbWUnKQppZiAoZmx1dHRlclZlcnNpb25OYW1lID09IG51bGwpIHsKICAgIGZsdXR0ZXJWZXJzaW9uTmFtZSA9ICcxLjAnCn0KCmRlZiBrZXlzdG9yZVByb3BlcnRpZXNGaWxlID0gcm9vdFByb2plY3QuZmlsZSgna2V5LnByb3BlcnRpZXMnKQpkZWYga2V5c3RvcmVQcm9wZXJ0aWVzID0gbmV3IFByb3BlcnRpZXMoKQppZiAoa2V5c3RvcmVQcm9wZXJ0aWVzRmlsZS5leGlzdHMoKSkgewogICAga2V5c3RvcmVQcm9wZXJ0aWVzLmxvYWQobmV3IEZpbGVJbnB1dFN0cmVhbShrZXlzdG9yZVByb3BlcnRpZXNGaWxlKSkKfQoKYW5kcm9pZCB7CiAgICBuYW1lc3BhY2UgImNvbS50bWFwcC50bV9hdXRvX2NhbGxlciIKICAgIGNvbXBpbGVTZGsgMzUKICAgIG5ka1ZlcnNpb24gZmx1dHRlci5uZGtWZXJzaW9uCgogICAgY29tcGlsZU9wdGlvbnMgewogICAgICAgIHNvdXJjZUNvbXBhdGliaWxpdHkgSmF2YVZlcnNpb24uVkVSU0lPTl8xXzgKICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84CiAgICB9CiAgICBrb3RsaW5PcHRpb25zIHsKICAgICAgICBqdm1UYXJnZXQgPSAnMS44JwogICAgfQogICAgc291cmNlU2V0cyB7CiAgICAgICAgbWFpbi5qYXZhLnNyY0RpcnMgKz0gJ3NyYy9tYWluL2tvdGxpbicKICAgIH0KCiAgICBkZWZhdWx0Q29uZmlnIHsKICAgICAgICBhcHBsaWNhdGlvbklkICJjb20udG1hcHAudG1fYXV0b19jYWxsZXIiCiAgICAgICAgbWluU2RrVmVyc2lvbiAyMQogICAgICAgIHRhcmdldFNka1ZlcnNpb24gMzUKICAgICAgICB2ZXJzaW9uQ29kZSBmbHV0dGVyVmVyc2lvbkNvZGUudG9JbnRlZ2VyKCkKICAgICAgICB2ZXJzaW9uTmFtZSBmbHV0dGVyVmVyc2lvbk5hbWUKICAgIH0KCiAgICBzaWduaW5nQ29uZmlncyB7CiAgICAgICAgcmVsZWFzZSB7CiAgICAgICAgICAgIGtleUFsaWFzIGtleXN0b3JlUHJvcGVydGllc1sna2V5QWxpYXMnXQogICAgICAgICAgICBrZXlQYXNzd29yZCBrZXlzdG9yZVByb3BlcnRpZXNbJ2tleVBhc3N3b3JkJ10KICAgICAgICAgICAgc3RvcmVGaWxlIGZpbGUoa2V5c3RvcmVQcm9wZXJ0aWVzWydzdG9yZUZpbGUnXSkKICAgICAgICAgICAgc3RvcmVQYXNzd29yZCBrZXlzdG9yZVByb3BlcnRpZXNbJ3N0b3JlUGFzc3dvcmQnXQogICAgICAgIH0KICAgIH0KCiAgICBidWlsZFR5cGVzIHsKICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAgc2lnbmluZ0NvbmZpZyBzaWduaW5nQ29uZmlncy5yZWxlYXNlCiAgICAgICAgICAgIG1pbmlmeUVuYWJsZWQgZmFsc2UKICAgICAgICAgICAgc2hyaW5rUmVzb3VyY2VzIGZhbHNlCiAgICAgICAgfQogICAgfQp9CgpmbHV0dGVyIHsKICAgIHNvdXJjZSAnLi4vLi4nCn0KIiIiCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvYnVpbGQuZ3JhZGxlJywgJ3cnKSBhcyBmOgogICAgZi53cml0ZShjb250ZW50KQpwcmludCgiYnVpbGQuZ3JhZGxlIHdyaXR0ZW4gT0siKQo=" | base64 -d | python3
 
       - name: Flutter pub get
         working-directory: freshapp

@@ -26,6 +26,13 @@ jobs:
           flutter-version: '3.22.0'
           channel: stable
 
+      - name: Install Android SDK Platform 35
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0" || true
+          echo "SDK 35 설치 완료"
+
       - name: Create Flutter scaffold
         run: flutter create --org com.tmapp --project-name tm_auto_caller --platforms android freshapp
 

@@ -122,8 +122,8 @@ class TMProvider extends ChangeNotifier {
     final contact = currentContact;
     if (contact == null) return;
 
-    final phone = contact.phones.isNotEmpty ? contact.phones.first.number : null;
-    if (phone == null || phone.isEmpty) return;
+    final phone = contact.phone;
+    if (phone.isEmpty) return;
 
     // 타이머 초기화
     callSeconds = 0;

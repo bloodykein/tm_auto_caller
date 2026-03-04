@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_phone_call_state/flutter_phone_call_state.dart';
 import '../models/tm_models.dart';
@@ -141,19 +142,29 @@ class TMProvider extends ChangeNotifier {
     _callConnected = false;
     _callSub?.cancel();
     _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
-      if (event.state == CallState.outgoing ||
-          event.state == CallState.outgoingAccept) {
-        _callConnected = true;
-      }
-      if (event.state == CallState.end && _callConnected) {
-        _callConnected = false;
-        _callSub?.cancel();
-        _timer?.cancel();
-        // 통화 종료 자동 감지 → 결과 입력 화면
+  try {
+    if (event.state == CallState.outgoing ||
+        event.state == CallState.outgoingAccept) {
+      _callConnected = true;
+    }
+    if (event.state == CallState.end && _callConnected) {
+      _callConnected = false;
+      _timer?.cancel();
+      // 리스너 내부에서 직접 cancel() 금지 → microtask로 지연
+      Future.microtask(() => _callSub?.cancel());
+      // UI 스레드에서 안전하게 상태 변경
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         phase = SessionPhase.recording;
         notifyListeners();
-      }
-    });
+      });
+    }
+  } catch (e) {
+    debugPrint('Call state error: $e');
+  }
+}, onError: (e) {
+  debugPrint('Phone state stream error: $e');
+});
+
 
     // Android 전용: 모니터 서비스 시작 (void 반환이므로 await 불필요)
     if (Platform.isAndroid) {

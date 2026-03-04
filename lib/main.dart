@@ -16,7 +16,7 @@ class TMApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => TMProvider(cloudSync: syncService)..initialize(),
+      create: (_) => TMProvider()..initialize(cloudSync: syncService),
       child: MaterialApp(
         title: 'TM 자동 통화',
         debugShowCheckedModeBanner: false,

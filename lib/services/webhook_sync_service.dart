@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,7 +6,7 @@ import 'cloud_sync_service.dart';
 
 const String _kWebhookUrlKey = 'webhook_url';
 const String _defaultWebhookUrl =
-    'https://script.google.com/macros/s/AKfycbxyPofCnGcj9u0vvpCcxTBvyrha3ymtk3HgVIq4yIBw274kvHlwyMvg7cz5r5If13HWrA/exec';
+    'https://script.google.com/macros/s/AKfycbwKc9CSfUrz5IDfCJctxeBa1inX0AtQXUbVd9yXJv7_ugVoenn17JY-EdsRXWiUYWikJA/exec';
 
 class WebhookSyncService implements CloudSyncService {
   String? _webhookUrl;
@@ -38,7 +37,7 @@ class WebhookSyncService implements CloudSyncService {
       final response = await request.close();
       await response.drain();
       client.close();
-      return response.statusCode == 200;
+      return response.statusCode == 200 || response.statusCode == 302;
     } catch (e) {
       return false;
     }

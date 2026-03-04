@@ -119,49 +119,48 @@ class TMProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════
 
   Future<void> startCall() async {
-    final contact = currentContact;
-    if (contact == null) return;
+  final contact = currentContact;
+  if (contact == null) return;
 
-    phase = SessionPhase.calling;
-    callSeconds = 0;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      callSeconds++;
-      notifyListeners();
-    });
-
-    // 통화 시작 시간 기록
-    final idx = _findContactIndex(contact.id);
-    if (idx >= 0) {
-      currentSession!.contacts[idx] = contact.copyWith(
-        callStartTime: DateTime.now(),
-      );
-    }
-
-    // 실제 전화 걸기
-    final uri = Uri(scheme: 'tel', path: contact.phone);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-
+  phase = SessionPhase.calling;
+  callSeconds = 0;
+  _timer?.cancel();
+  _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    callSeconds++;
     notifyListeners();
+  });
+
+  // 통화 시작 시간 기록
+  final idx = _findContactIndex(contact.id);
+  if (idx >= 0) {
+    currentSession!.contacts[idx] = contact.copyWith(
+      callStartTime: DateTime.now(),
+    );
   }
 
-  void endCall() {
-    _timer?.cancel();
-    phase = SessionPhase.recording;
-
-    final contact = currentContact;
-    if (contact != null) {
-      final idx = _findContactIndex(contact.id);
-      if (idx >= 0) {
-        currentSession!.contacts[idx] = contact.copyWith(
-          callDuration: callSeconds,
-        );
-      }
+  // ✅ 통화 상태 감지 시작
+  bool wasOffHook = false;
+  FlutterPhoneCallState.startListener();
+  FlutterPhoneCallState.phoneCallStateStream.listen((state) {
+    if (state == PhoneCallState.offHook) {
+      wasOffHook = true; // 통화 연결됨
     }
-    notifyListeners();
+    if (state == PhoneCallState.idle && wasOffHook) {
+      // 통화 중이었다가 종료됨 → 자동으로 결과 입력창 이동
+      wasOffHook = false;
+      FlutterPhoneCallState.stopListener();
+      endCall(); // ← 자동 호출!
+    }
+  });
+
+  // 실제 전화 걸기
+  final uri = Uri(scheme: 'tel', path: contact.phone);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
   }
+
+  notifyListeners();
+}
 
   // ═══════════════════════════════════════════════
   // v4: 결과 저장 + 자동 재시도 분류

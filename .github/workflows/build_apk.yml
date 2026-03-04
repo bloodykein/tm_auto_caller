@@ -55,7 +55,47 @@ jobs:
           printf '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n  <external-path name="external_files" path="."/>\n  <cache-path name="cache" path="."/>\n</paths>\n' > freshapp/android/app/src/main/res/xml/file_paths.xml
 
       - name: Patch AndroidManifest permissions
-        run: echo "aW1wb3J0IHJlCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvc3JjL21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCcpIGFzIGY6CiAgICBjID0gZi5yZWFkKCkKcGVybXMgPSAoCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRUFEX0NPTlRBQ1RTIi8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5DQUxMX1BIT05FIi8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRUFEX1BIT05FX1NUQVRFIi8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5XUklURV9FWFRFUk5BTF9TVE9SQUdFIiBhbmRyb2lkOm1heFNka1ZlcnNpb249IjI4Ii8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRUFEX0VYVEVSTkFMX1NUT1JBR0UiIGFuZHJvaWQ6bWF4U2RrVmVyc2lvbj0iMzIiLz4KICAgICcKICAgICc8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLklOVEVSTkVUIi8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5BQ0NFU1NfTkVUV09SS19TVEFURSIvPgogICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uRk9SRUdST1VORF9TRVJWSUNFIi8+CiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5GT1JFR1JPVU5EX1NFUlZJQ0VfUEhPTkVfQ0FMTCIvPgogICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uTUFOQUdFX09XTl9DQUxMUyIvPgogICAgJwogICAgJzx1c2VzLXBlcm1pc3Rpb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUE9TVF9OT1RJRklDQVRJT05TIi8+CiAgICAnCikKZnAgPSAoJzxwcm92aWRlciBhbmRyb2lkOm5hbWU9ImFuZHJvaWR4LmNvcmUuY29udGVudC5GaWxlUHJvdmlkZXIiICcKICAgICAgJ2FuZHJvaWQ6YXV0aG9yaXRpZXM9IiR7YXBwbGljYXRpb25JZH0uZmlsZXByb3ZpZGVyIiAnCiAgICAgICdhbmRyb2lkOmV4cG9ydGVkPSJmYWxzZSIgYW5kcm9pZDpncmFudFVyaVBlcm1pc3Npb25zPSJ0cnVlIj4nCiAgICAgICc8bWV0YS1kYXRhIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5zdXBwb3J0LkZJTEVfUFJPVklERVJfUEFUSFMiICcKICAgICAgJ2FuZHJvaWQ6cmVzb3VyY2U9IkB4bWwvZmlsZV9wYXRocyIvPjwvcHJvdmlkZXI+JwogICAgICAnPHNlcnZpY2UgYW5kcm9pZDpuYW1lPSJjb20ucmVkZXZyeC5mbHV0dGVyX3Bob25lX2NhbGxfc3RhdGUucmVjZWl2ZXIuQ2FsbE1vbml0b3JpbmdTZXJ2aWNlIiAnCiAgICAgICdhbmRyb2lkOmVuYWJsZWQ9InRydWUiIGFuZHJvaWQ6ZXhwb3J0ZWQ9ImZhbHNlIiAnCiAgICAgICdhbmRyb2lkOmZvcmVncm91bmRTZXJ2aWNlVHlwZT0icGhvbmVDYWxsIi8+JykKYyA9IGMucmVwbGFjZSgnPGFwcGxpY2F0aW9uJywgcGVybXMgKyAnPGFwcGxpY2F0aW9uJywgMSkKYyA9IGMucmVwbGFjZSgnPC9hcHBsaWNhdGlvbj4nLCBmcCArICc8L2FwcGxpY2F0aW9uPicsIDEpCmMgPSByZS5zdWIocidhbmRyb2lkOmxhYmVsPSJbXiJdKiInLCAnYW5kcm9pZDpsYWJlbD0iVE0gQXV0b0NhbGxlciInLCBjKQp3aXRoIG9wZW4oJ2ZyZXNoYXBwL2FuZHJvaWQvYXBwL3NyYy9tYWluL0FuZHJvaWRNYW5pZmVzdC54bWwnLCAndycpIGFzIGY6CiAgICBmLndyaXRlKGMpCnByaW50KCdNYW5pZmVzdCBwYXRjaGVkIE9LJykK" | base64 -d | python3
+        run: |
+          python3 << 'PYEOF'
+          import re
+
+          with open('freshapp/android/app/src/main/AndroidManifest.xml') as f:
+              c = f.read()
+
+          perms = '\n'.join([
+              '<uses-permission android:name="android.permission.READ_CONTACTS"/>',
+              '<uses-permission android:name="android.permission.CALL_PHONE"/>',
+              '<uses-permission android:name="android.permission.READ_PHONE_STATE"/>',
+              '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
+              '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>',
+              '<uses-permission android:name="android.permission.INTERNET"/>',
+              '<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>',
+              '<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>',
+              '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>',
+              '<uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>',
+              '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
+          ]) + '\n'
+
+          fp = (
+              '<provider android:name="androidx.core.content.FileProvider" '
+              'android:authorities="${applicationId}.fileprovider" '
+              'android:exported="false" android:grantUriPermissions="true">'
+              '<meta-data android:name="android.support.FILE_PROVIDER_PATHS" '
+              'android:resource="@xml/file_paths"/></provider>'
+              '<service android:name="com.redevrx.flutter_phone_call_state.receiver.CallMonitoringService" '
+              'android:enabled="true" android:exported="false" '
+              'android:foregroundServiceType="phoneCall"/>'
+          )
+
+          c = c.replace('<application', perms + '<application', 1)
+          c = c.replace('</application>', fp + '</application>', 1)
+          c = re.sub(r'android:label="[^"]*"', 'android:label="TM AutoCaller"', c)
+
+          with open('freshapp/android/app/src/main/AndroidManifest.xml', 'w') as f:
+              f.write(c)
+
+          print('Manifest patched OK')
+          PYEOF
 
       - name: Write pubspec.yaml
         run: |

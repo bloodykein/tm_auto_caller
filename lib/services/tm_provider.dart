@@ -13,6 +13,7 @@ enum SessionPhase { idle, waiting, calling, recording, completed }
 class TMProvider extends ChangeNotifier {
   final DatabaseService _db = DatabaseService();
   CloudSyncService? _cloudSync;
+  CloudSyncService? get cloudSync => _cloudSync;
 
   // ─── 세션 목록 ───────────────────────────────
   List<TMSession> sessions = [];

@@ -6,8 +6,7 @@ import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final syncService = WebhookSyncService();
-  runApp(TMApp(syncService: syncService));
+  runApp(TMApp(syncService: WebhookSyncService()));
 }
 
 class TMApp extends StatelessWidget {

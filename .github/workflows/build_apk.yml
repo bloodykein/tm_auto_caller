@@ -59,10 +59,18 @@ jobs:
 
       - name: Write pubspec.yaml
         run: |
-          cat > freshapp/pubspec.yaml << 'PUBSPEC'
+          # 2024-01-01 기준 경과 분을 versionCode로 사용 (자동 증가)
+          VERSION_CODE=$(python3 -c "
+          from datetime import datetime, timezone
+          base = datetime(2024, 1, 1, tzinfo=timezone.utc)
+          now = datetime.now(timezone.utc)
+          print(int((now - base).total_seconds() // 60))
+          ")
+          echo "Auto versionCode: $VERSION_CODE"
+          cat > freshapp/pubspec.yaml << PUBSPEC
           name: tm_auto_caller
           description: TM Auto Caller v4
-          version: 4.0.3+7
+          version: 4.0.3+${VERSION_CODE}
 
           environment:
             sdk: ">=3.0.0 <4.0.0"
@@ -82,7 +90,6 @@ jobs:
             connectivity_plus: ^5.0.2
             flutter_phone_call_state: 0.1.0
             shared_preferences: ^2.2.2
-
 
           dev_dependencies:
             flutter_test:

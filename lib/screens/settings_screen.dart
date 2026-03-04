@@ -55,7 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         sessionId: 'test_session',
         sessionName: '연결 테스트',
         contact: TMContact(
-          id: 'test_001', name: '테스트 고객', phone: '010-0000-0000',
+          id: 1', name: '테스트 고객', phone: '010-0000-0000',
           resultCodes: ['통화가능'], customerGrade: 'A', memo: '앱 연결 테스트',
           callDuration: 30, retryCount: 0, isCompleted: true, isSkipped: false,
         ),

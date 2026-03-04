@@ -11,7 +11,7 @@ import 'cloud_sync_service.dart';
 
 enum SessionPhase { idle, waiting, calling, recording, completed }
 
-class TMProvider extends ChangeNotifier {
+class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
   final DatabaseService _db = DatabaseService();
   CloudSyncService? _cloudSync;
   CloudSyncService? get cloudSync => _cloudSync;
@@ -70,12 +70,27 @@ class TMProvider extends ChangeNotifier {
 
   Future<void> initialize({CloudSyncService? cloudSync}) async {
     _cloudSync = cloudSync;
+    WidgetsBinding.instance.addObserver(this); // 앱 생명주기 감지 등록
     await loadAllSessions();
   }
 
   Future<void> loadAllSessions() async {
     sessions = await _db.getAllSessions();
     notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════
+  // 앱 생명주기 감지 (통화 종료 후 복귀 처리)
+  // ═══════════════════════════════════════════════
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && phase == SessionPhase.calling) {
+      // 통화 중 상태에서 앱으로 돌아왔다면 → 결과 입력 화면으로 전환
+      _timer?.cancel();
+      phase = SessionPhase.recording;
+      notifyListeners();
+    }
   }
 
   // ═══════════════════════════════════════════════
@@ -142,29 +157,26 @@ class TMProvider extends ChangeNotifier {
     _callConnected = false;
     _callSub?.cancel();
     _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
-  try {
-    if (event.state == CallState.outgoing ||
-        event.state == CallState.outgoingAccept) {
-      _callConnected = true;
-    }
-    if (event.state == CallState.end && _callConnected) {
-      _callConnected = false;
-      _timer?.cancel();
-      // 리스너 내부에서 직접 cancel() 금지 → microtask로 지연
-      Future.microtask(() => _callSub?.cancel());
-      // UI 스레드에서 안전하게 상태 변경
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        phase = SessionPhase.recording;
-        notifyListeners();
-      });
-    }
-  } catch (e) {
-    debugPrint('Call state error: $e');
-  }
-}, onError: (e) {
-  debugPrint('Phone state stream error: $e');
-});
-
+      try {
+        if (event.state == CallState.outgoing ||
+            event.state == CallState.outgoingAccept) {
+          _callConnected = true;
+        }
+        if (event.state == CallState.end && _callConnected) {
+          _callConnected = false;
+          _timer?.cancel();
+          // 리스너 내부에서 직접 cancel() 금지 → microtask로 지연
+          Future.microtask(() => _callSub?.cancel());
+          // addPostFrameCallback 제거 → 직접 상태 변경 (백그라운드에서도 동작)
+          phase = SessionPhase.recording;
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint('Call state error: $e');
+      }
+    }, onError: (e) {
+      debugPrint('Phone state stream error: $e');
+    });
 
     // Android 전용: 모니터 서비스 시작 (void 반환이므로 await 불필요)
     if (Platform.isAndroid) {
@@ -366,6 +378,7 @@ class TMProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // 생명주기 감지 해제
     _callSub?.cancel();
     _timer?.cancel();
     super.dispose();

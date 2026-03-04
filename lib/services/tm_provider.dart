@@ -1,5 +1,6 @@
 // tm_provider.dart - v4: session resume + auto-retry core logic
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/tm_models.dart';
@@ -119,47 +120,53 @@ class TMProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════
 
   Future<void> startCall() async {
+  if (_session == null || isCompleted) return;
   final contact = currentContact;
   if (contact == null) return;
 
-  phase = SessionPhase.calling;
-  callSeconds = 0;
-  _timer?.cancel();
-  _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-    callSeconds++;
+  final phone = contact.phones.isNotEmpty ? contact.phones.first.number : null;
+  if (phone == null || phone.isEmpty) return;
+
+  _callDuration = 0;
+  _callTimer?.cancel();
+  _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _callDuration++;
     notifyListeners();
   });
 
-  // 통화 시작 시간 기록
-  final idx = _findContactIndex(contact.id);
-  if (idx >= 0) {
-    currentSession!.contacts[idx] = contact.copyWith(
-      callStartTime: DateTime.now(),
-    );
-  }
+  _callStartTime = DateTime.now();
+  _phase = SessionPhase.calling;
+  notifyListeners();
 
-  // ✅ 통화 상태 감지 시작
-  bool wasOffHook = false;
-  FlutterPhoneCallState.startListener();
-  FlutterPhoneCallState.phoneCallStateStream.listen((state) {
-    if (state == PhoneCallState.offHook) {
-      wasOffHook = true; // 통화 연결됨
+  // ✅ 올바른 API: PhoneCallState.instance 사용
+  bool _callConnected = false;
+  StreamSubscription? _callSub;
+
+  _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
+    if (event.state == CallState.outgoing ||
+        event.state == CallState.outgoingAccept) {
+      _callConnected = true;
     }
-    if (state == PhoneCallState.idle && wasOffHook) {
-      // 통화 중이었다가 종료됨 → 자동으로 결과 입력창 이동
-      wasOffHook = false;
-      FlutterPhoneCallState.stopListener();
-      endCall(); // ← 자동 호출!
+    if (event.state == CallState.end && _callConnected) {
+      _callConnected = false;
+      _callSub?.cancel();
+      _callTimer?.cancel();
+      // 🎯 통화 종료 자동 감지 → 결과 입력 화면
+      _phase = SessionPhase.recording;
+      notifyListeners();
     }
   });
 
-  // 실제 전화 걸기
-  final uri = Uri(scheme: 'tel', path: contact.phone);
+  // Android 전용: 모니터 서비스 시작
+  if (Platform.isAndroid) {
+    await PhoneCallState.instance.startMonitorService();
+  }
+
+  // 전화 앱 실행
+  final uri = Uri.parse('tel:$phone');
   if (await canLaunchUrl(uri)) {
     await launchUrl(uri);
   }
-
-  notifyListeners();
 }
 
   // ═══════════════════════════════════════════════

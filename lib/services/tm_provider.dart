@@ -168,7 +168,11 @@ class TMProvider extends ChangeNotifier {
 
     // Android 전용: 모니터 서비스 시작 (void 반환이므로 await 불필요)
     if (Platform.isAndroid) {
-      PhoneCallState.instance.startMonitorService();
+      try {
+        PhoneCallState.instance.startMonitorService();
+      } catch (e) {
+        debugPrint('startMonitorService error: $e');
+      }
     }
 
     // 전화 앱 실행

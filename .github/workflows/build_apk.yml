@@ -62,7 +62,7 @@ jobs:
           cat > freshapp/pubspec.yaml << 'PUBSPEC'
           name: tm_auto_caller
           description: TM Auto Caller v4
-          version: 4.0.2+6
+          version: 4.0.3+7
 
           environment:
             sdk: ">=3.0.0 <4.0.0"

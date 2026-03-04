@@ -81,6 +81,8 @@ jobs:
             path_provider: ^2.1.1
             connectivity_plus: ^5.0.2
             flutter_phone_call_state: 0.1.0
+            shared_preferences: ^2.2.2
+
 
           dev_dependencies:
             flutter_test:

@@ -58,7 +58,38 @@ jobs:
         run: echo "aW1wb3J0IHJlCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvc3JjL21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCcpIGFzIGY6CiAgICBjID0gZi5yZWFkKCkKcGVybXMgPSAoCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRUFEX0NPTlRBQ1RTIi8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uQ0FMTF9QSE9ORSIvPlxuICAgICcKICAgICc8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQURfUEhPTkVfU1RBVEUiLz5cbiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5XUklURV9FWFRFUk5BTF9TVE9SQUdFIiBhbmRyb2lkOm1heFNka1ZlcnNpb249IjI4Ii8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUkVBRF9FWFRFUk5BTF9TVE9SQUdFIiBhbmRyb2lkOm1heFNka1ZlcnNpb249IjMyIi8+XG4gICAgJwogICAgJzx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uSU5URVJORVQiLz5cbiAgICAnCiAgICAnPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5BQ0NFU1NfTkVUV09SS19TVEFURSIvPlxuICAgICcKKQpmcCA9ICgnPHByb3ZpZGVyIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZHguY29yZS5jb250ZW50LkZpbGVQcm92aWRlciIgJwogICAgICAnYW5kcm9pZDphdXRob3JpdGllcz0iJHthcHBsaWNhdGlvbklkfS5maWxlcHJvdmlkZXIiICcKICAgICAgJ2FuZHJvaWQ6ZXhwb3J0ZWQ9ImZhbHNlIiBhbmRyb2lkOmdyYW50VXJpUGVybWlzc2lvbnM9InRydWUiPicKICAgICAgJzxtZXRhLWRhdGEgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnN1cHBvcnQuRklMRV9QUk9WSURFUl9QQVRIUyIgJwogICAgICAnYW5kcm9pZDpyZXNvdXJjZT0iQHhtbC9maWxlX3BhdGhzIi8+PC9wcm92aWRlcj4nKQpjID0gYy5yZXBsYWNlKCc8YXBwbGljYXRpb24nLCBwZXJtcyArICc8YXBwbGljYXRpb24nLCAxKQpjID0gYy5yZXBsYWNlKCc8L2FwcGxpY2F0aW9uPicsIGZwICsgJzwvYXBwbGljYXRpb24+JywgMSkKYyA9IHJlLnN1YihyJ2FuZHJvaWQ6bGFiZWw9IlteIl0qIicsICdhbmRyb2lkOmxhYmVsPSJUTSBBdXRvQ2FsbGVyIicsIGMpCndpdGggb3BlbignZnJlc2hhcHAvYW5kcm9pZC9hcHAvc3JjL21haW4vQW5kcm9pZE1hbmlmZXN0LnhtbCcsICd3JykgYXMgZjoKICAgIGYud3JpdGUoYykKcHJpbnQoJ01hbmlmZXN0IHBhdGNoZWQgT0snKQo=" | base64 -d | python3
 
       - name: Write pubspec.yaml
-        run: echo "bmFtZTogdG1fYXV0b19jYWxsZXIK...truUK" | base64 -d > freshapp/pubspec.yaml
+        run: |
+          cat > freshapp/pubspec.yaml << 'PUBSPEC'
+          name: tm_auto_caller
+          description: TM Auto Caller v4
+          version: 4.0.2+6
+
+          environment:
+            sdk: ">=3.0.0 <4.0.0"
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            flutter_contacts: ^1.1.9+2
+            url_launcher: ^6.2.0
+            permission_handler: ^10.4.5
+            sqflite: ^2.3.0
+            path: ^1.8.3
+            provider: ^6.0.5
+            excel: ^4.0.6
+            share_plus: ^9.0.0
+            path_provider: ^2.1.1
+            connectivity_plus: ^5.0.2
+            flutter_phone_call_state: 0.1.0
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^3.0.0
+
+          flutter:
+            uses-material-design: true
+          PUBSPEC
 
       - name: Decode Keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > freshapp/android/app/tm_auto_caller.jks

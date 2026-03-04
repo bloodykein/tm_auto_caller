@@ -99,7 +99,7 @@ jobs:
 
       - name: Write pubspec.yaml
         run: |
-          # 2024-01-01 기준 경과 분을 versionCode로 사용 (자동 증가)
+          # 2024-01-01 기준 경과 분으로 versionCode 자동 설정
           VERSION_CODE=$(python3 -c "
           from datetime import datetime, timezone
           base = datetime(2024, 1, 1, tzinfo=timezone.utc)

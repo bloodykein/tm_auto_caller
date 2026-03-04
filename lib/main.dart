@@ -1,35 +1,30 @@
-// main.dart - v4 entry point
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/tm_provider.dart';
-import 'services/database_service.dart';
+import 'services/webhook_sync_service.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const TMApp());
+  final syncService = WebhookSyncService();
+  runApp(TMApp(syncService: syncService));
 }
 
 class TMApp extends StatelessWidget {
-  const TMApp({super.key});
+  final WebhookSyncService syncService;
+  const TMApp({super.key, required this.syncService});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => TMProvider()..initialize(),
+      create: (_) => TMProvider(cloudSync: syncService)..initialize(),
       child: MaterialApp(
         title: 'TM 자동 통화',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
-          ),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
-          appBarTheme: const AppBarTheme(
-            elevation: 0,
-            centerTitle: false,
-          ),
+          appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
         ),
         home: const HomeScreen(),
       ),

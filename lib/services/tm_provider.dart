@@ -3,10 +3,10 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_phone_call_state/flutter_phone_call_state.dart';
 import '../models/tm_models.dart';
 import 'database_service.dart';
 import 'cloud_sync_service.dart';
-import 'package:flutter_phone_call_state/flutter_phone_call_state.dart';
 
 enum SessionPhase { idle, waiting, calling, recording, completed }
 
@@ -24,7 +24,6 @@ class TMProvider extends ChangeNotifier {
   SessionPhase phase = SessionPhase.idle;
 
   // ─── 통화 큐 ─────────────────────────────────
-  /// 현재 차례 인덱스 (contacts 리스트 기준)
   int _currentIndex = 0;
   int get currentIndex => _currentIndex;
 
@@ -40,7 +39,6 @@ class TMProvider extends ChangeNotifier {
     return contacts[1];
   }
 
-  /// 아직 완료/건너뛰기 안 된 연락처 (재시도 포함)
   List<TMContact> get _pendingContacts {
     if (currentSession == null) return [];
     return currentSession!.contacts
@@ -51,6 +49,10 @@ class TMProvider extends ChangeNotifier {
   // ─── 타이머 ───────────────────────────────────
   Timer? _timer;
   int callSeconds = 0;
+
+  // ─── 통화 상태 감지 ────────────────────────────
+  StreamSubscription? _callSub;
+  bool _callConnected = false;
 
   // ─── 결과 입력 ────────────────────────────────
   List<String> selectedResults = [];
@@ -78,13 +80,9 @@ class TMProvider extends ChangeNotifier {
   // v4: 세션 이어가기 (Session Resume)
   // ═══════════════════════════════════════════════
 
-  /// 미완료 세션을 불러와 현재 세션으로 설정
   Future<void> resumeSession(TMSession session) async {
     currentSession = session;
     _currentIndex = session.currentIndex;
-
-    // pending 연락처 중 첫 번째로 이동
-    // (재시도 연락처는 needsRetry == true → 아직 isCompleted = false)
     phase = SessionPhase.waiting;
     _resetResultInput();
     notifyListeners();
@@ -120,54 +118,63 @@ class TMProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════
 
   Future<void> startCall() async {
-  if (_session == null || isCompleted) return;
-  final contact = currentContact;
-  if (contact == null) return;
+    if (currentSession == null) return;
+    final contact = currentContact;
+    if (contact == null) return;
 
-  final phone = contact.phones.isNotEmpty ? contact.phones.first.number : null;
-  if (phone == null || phone.isEmpty) return;
+    final phone = contact.phones.isNotEmpty ? contact.phones.first.number : null;
+    if (phone == null || phone.isEmpty) return;
 
-  _callDuration = 0;
-  _callTimer?.cancel();
-  _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-    _callDuration++;
-    notifyListeners();
-  });
-
-  _callStartTime = DateTime.now();
-  _phase = SessionPhase.calling;
-  notifyListeners();
-
-  // ✅ 올바른 API: PhoneCallState.instance 사용
-  bool _callConnected = false;
-  StreamSubscription? _callSub;
-
-  _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
-    if (event.state == CallState.outgoing ||
-        event.state == CallState.outgoingAccept) {
-      _callConnected = true;
-    }
-    if (event.state == CallState.end && _callConnected) {
-      _callConnected = false;
-      _callSub?.cancel();
-      _callTimer?.cancel();
-      // 🎯 통화 종료 자동 감지 → 결과 입력 화면
-      _phase = SessionPhase.recording;
+    // 타이머 초기화
+    callSeconds = 0;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      callSeconds++;
       notifyListeners();
+    });
+
+    phase = SessionPhase.calling;
+    notifyListeners();
+
+    // 통화 상태 감지 시작
+    _callConnected = false;
+    _callSub?.cancel();
+    _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
+      if (event.state == CallState.outgoing ||
+          event.state == CallState.outgoingAccept) {
+        _callConnected = true;
+      }
+      if (event.state == CallState.end && _callConnected) {
+        _callConnected = false;
+        _callSub?.cancel();
+        _timer?.cancel();
+        // 통화 종료 자동 감지 → 결과 입력 화면
+        phase = SessionPhase.recording;
+        notifyListeners();
+      }
+    });
+
+    // Android 전용: 모니터 서비스 시작 (void 반환이므로 await 불필요)
+    if (Platform.isAndroid) {
+      PhoneCallState.instance.startMonitorService();
     }
-  });
 
-  // Android 전용: 모니터 서비스 시작
-  if (Platform.isAndroid) {
-    await PhoneCallState.instance.startMonitorService();
+    // 전화 앱 실행
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
   }
 
-  // 전화 앱 실행
-  final uri = Uri.parse('tel:$phone');
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri);
+  // 수동 통화 종료 (폴백 버튼용)
+  void endCall() {
+    _callSub?.cancel();
+    _callSub = null;
+    _callConnected = false;
+    _timer?.cancel();
+    phase = SessionPhase.recording;
+    notifyListeners();
   }
-}
 
   // ═══════════════════════════════════════════════
   // v4: 결과 저장 + 자동 재시도 분류
@@ -180,7 +187,6 @@ class TMProvider extends ChangeNotifier {
     final idx = _findContactIndex(contact.id);
     if (idx < 0) return;
 
-    // ── 재시도 트리거 여부 판단 ──
     final needsRetry = selectedResults.any(ResultCode.isRetryTrigger);
 
     final updated = contact.copyWith(
@@ -188,32 +194,26 @@ class TMProvider extends ChangeNotifier {
       customerGrade: selectedGrade,
       memo: memoText,
       callDuration: callSeconds,
-      isCompleted: !needsRetry,          // 재시도 대상은 완료 처리 안 함
+      isCompleted: !needsRetry,
       retryCount: needsRetry
-          ? contact.retryCount + 1       // 재시도 횟수 증가
+          ? contact.retryCount + 1
           : contact.retryCount,
     );
 
     currentSession!.contacts[idx] = updated;
 
-    // DB 저장
     await _db.updateContact(currentSession!.id, updated);
 
-    // ── 재시도 대상 → 큐 맨 뒤로 이동 ──
     if (needsRetry) {
-      // contacts 리스트에서 제거 후 맨 뒤에 추가
       currentSession!.contacts.removeAt(idx);
       currentSession!.contacts.add(updated);
     }
 
-    // 진행 위치 저장
     _currentIndex++;
     await _db.saveSessionProgress(currentSession!.id, _currentIndex);
 
-    // 클라우드 동기화
     _syncToCloud(updated);
 
-    // 다음 연락처로 이동
     _resetResultInput();
     _advanceToNextContact();
   }
@@ -222,7 +222,6 @@ class TMProvider extends ChangeNotifier {
     final pending = _pendingContacts;
 
     if (pending.isEmpty) {
-      // 세션 완료
       _completeSession();
     } else {
       phase = SessionPhase.waiting;
@@ -243,14 +242,12 @@ class TMProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// v4: 재시도 연락처만 이어서 진행
   Future<void> startRetryRound() async {
     if (currentSession == null) return;
 
     final retryContacts = currentSession!.retryContacts;
     if (retryContacts.isEmpty) return;
 
-    // 재시도 연락처만 새 세션으로 시작 (원 세션 유지)
     phase = SessionPhase.waiting;
     _resetResultInput();
     notifyListeners();
@@ -318,7 +315,6 @@ class TMProvider extends ChangeNotifier {
       syncStatus = SyncStatus.synced;
     } catch (e) {
       syncStatus = SyncStatus.error;
-      // 오프라인 큐에 추가
       await _db.addToSyncQueue(
         sessionId: currentSession!.id,
         contactId: contact.id,
@@ -344,6 +340,7 @@ class TMProvider extends ChangeNotifier {
   }
 
   void exitSession() {
+    _callSub?.cancel();
     _timer?.cancel();
     currentSession = null;
     phase = SessionPhase.idle;
@@ -353,6 +350,7 @@ class TMProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _callSub?.cancel();
     _timer?.cancel();
     super.dispose();
   }

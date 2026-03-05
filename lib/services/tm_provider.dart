@@ -1,4 +1,4 @@
-// tm_provider.dart - v4: session resume + auto-retry core logic
+// tm_provider.dart - v4: session resume + auto-retry + cloud sync fix
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -18,8 +18,10 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   // ─── 세션 목록 ───────────────────────────────
   List<TMSession> sessions = [];
-  List<TMSession> get incompleteSessions => sessions.where((s) => !s.isComplete).toList();
-  List<TMSession> get completedSessions => sessions.where((s) => s.isComplete).toList();
+  List<TMSession> get incompleteSessions =>
+      sessions.where((s) => !s.isComplete).toList();
+  List<TMSession> get completedSessions =>
+      sessions.where((s) => s.isComplete).toList();
 
   // ─── 현재 세션 ───────────────────────────────
   TMSession? currentSession;
@@ -72,6 +74,11 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
     _cloudSync = cloudSync;
     WidgetsBinding.instance.addObserver(this); // 앱 생명주기 감지 등록
     await loadAllSessions();
+
+    // ✅ 앱 시작 시 미전송 오프라인 큐 자동 재전송
+    if (_cloudSync != null) {
+      unawaited(_cloudSync!.flushOfflineQueue());
+    }
   }
 
   Future<void> loadAllSessions() async {
@@ -85,7 +92,8 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && phase == SessionPhase.calling) {
+    if (state == AppLifecycleState.resumed &&
+        phase == SessionPhase.calling) {
       // 통화 중 상태에서 앱으로 돌아왔다면 → 결과 입력 화면으로 전환
       _timer?.cancel();
       phase = SessionPhase.recording;
@@ -156,7 +164,8 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
     // 통화 상태 감지 시작
     _callConnected = false;
     _callSub?.cancel();
-    _callSub = PhoneCallState.instance.phoneStateChange.listen((event) {
+    _callSub =
+        PhoneCallState.instance.phoneStateChange.listen((event) {
       try {
         if (event.state == CallState.outgoing ||
             event.state == CallState.outgoingAccept) {
@@ -178,7 +187,7 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('Phone state stream error: $e');
     });
 
-    // Android 전용: 모니터 서비스 시작 (void 반환이므로 await 불필요)
+    // Android 전용: 모니터 서비스 시작
     if (Platform.isAndroid) {
       try {
         PhoneCallState.instance.startMonitorService();
@@ -223,13 +232,11 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
       memo: memoText,
       callDuration: callSeconds,
       isCompleted: !needsRetry,
-      retryCount: needsRetry
-          ? contact.retryCount + 1
-          : contact.retryCount,
+      retryCount:
+          needsRetry ? contact.retryCount + 1 : contact.retryCount,
     );
 
     currentSession!.contacts[idx] = updated;
-
     await _db.updateContact(currentSession!.id, updated);
 
     if (needsRetry) {
@@ -240,7 +247,8 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentIndex++;
     await _db.saveSessionProgress(currentSession!.id, _currentIndex);
 
-    _syncToCloud(updated);
+    // ✅ unawaited로 fire-and-forget + 에러 캡처 (블로킹 없이 동기화)
+    unawaited(_syncToCloud(updated));
 
     _resetResultInput();
     _advanceToNextContact();
@@ -342,12 +350,9 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
       );
       syncStatus = SyncStatus.synced;
     } catch (e) {
+      debugPrint('Cloud sync error: $e');
       syncStatus = SyncStatus.error;
-      await _db.addToSyncQueue(
-        sessionId: currentSession!.id,
-        contactId: contact.id,
-        payload: contact.toMap().toString(),
-      );
+      // webhook_sync_service에서 이미 오프라인 큐에 저장함
     }
     notifyListeners();
   }

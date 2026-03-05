@@ -1,4 +1,7 @@
-// tm_provider.dart - v4: session resume + auto-retry + cloud sync fix
+// tm_provider.dart - v4: 모든 수정 통합본
+// ① WidgetsBindingObserver (통화 종료 후 앱 복귀)
+// ② unawaited 동기화 + 앱 시작 시 오프라인 큐 자동 전송
+// ③ syncAllToCloud() 수동 배치 동기화 추가
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,6 +11,7 @@ import 'package:flutter_phone_call_state/flutter_phone_call_state.dart';
 import '../models/tm_models.dart';
 import 'database_service.dart';
 import 'cloud_sync_service.dart';
+import 'webhook_sync_service.dart';  // ✅ 배치 동기화용
 
 enum SessionPhase { idle, waiting, calling, recording, completed }
 
@@ -247,7 +251,7 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentIndex++;
     await _db.saveSessionProgress(currentSession!.id, _currentIndex);
 
-    // ✅ unawaited로 fire-and-forget + 에러 캡처 (블로킹 없이 동기화)
+    // ✅ unawaited: 블로킹 없이 동기화, 에러는 로그+큐에 저장
     unawaited(_syncToCloud(updated));
 
     _resetResultInput();
@@ -256,7 +260,6 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void _advanceToNextContact() {
     final pending = _pendingContacts;
-
     if (pending.isEmpty) {
       _completeSession();
     } else {
@@ -333,7 +336,7 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ═══════════════════════════════════════════════
-  // 클라우드 동기화
+  // 클라우드 동기화 (실시간 단건)
   // ═══════════════════════════════════════════════
 
   Future<void> _syncToCloud(TMContact contact) async {
@@ -352,9 +355,50 @@ class TMProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Cloud sync error: $e');
       syncStatus = SyncStatus.error;
-      // webhook_sync_service에서 이미 오프라인 큐에 저장함
+      // webhook_sync_service에서 오프라인 큐에 저장 완료
     }
     notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════
+  // 수동 배치 동기화 (UI 버튼용)
+  // ═══════════════════════════════════════════════
+
+  Future<SyncBatchResult?> syncAllToCloud(TMSession session) async {
+    // WebhookSyncService로 캐스팅 (배치 메서드 접근)
+    final webhook = _cloudSync as WebhookSyncService?;
+    if (webhook == null) {
+      debugPrint('syncAllToCloud: _cloudSync is null or not WebhookSyncService');
+      return null;
+    }
+
+    syncStatus = SyncStatus.syncing;
+    notifyListeners();
+
+    try {
+      // 완료 또는 스킵된 연락처만 동기화
+      final targets = session.contacts
+          .where((c) => c.isCompleted || c.isSkipped)
+          .toList();
+
+      debugPrint('syncAllToCloud: syncing ${targets.length} contacts');
+
+      final result = await webhook.syncBatch(
+        sessionId: session.id,
+        sessionName: session.name,
+        contacts: targets,
+      );
+
+      syncStatus =
+          result.failed == 0 ? SyncStatus.synced : SyncStatus.error;
+      notifyListeners();
+      return result;
+    } catch (e) {
+      debugPrint('syncAllToCloud error: $e');
+      syncStatus = SyncStatus.error;
+      notifyListeners();
+      return null;
+    }
   }
 
   // ═══════════════════════════════════════════════

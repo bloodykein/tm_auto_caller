@@ -14,7 +14,7 @@ class SyncBatchResult {
 
 class WebhookSyncService implements CloudSyncService {
   static const _defaultUrl =
-      'https://script.google.com/macros/s/AKfycbwKc9CSfUrz5IDfCJctxeBa1inX0AtQXUbVd9yXJv7_ugVoenn17JY-EdsRXWiUYWikJA/exec';
+      'https://script.google.com/macros/s/AKfycbzcajzOHW54cfvuOx7W6cNnHi1RKGugxHR7kT2RezUzLX_mtflYZg5yh6VtZtr-TvudYQ/exec';
   static const _prefKey = 'webhook_url';
   static const _queueKey = 'offline_sync_queue';
 

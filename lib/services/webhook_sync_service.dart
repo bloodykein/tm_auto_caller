@@ -1,130 +1,204 @@
+// webhook_sync_service.dart - 시간대 수정 + 배치 동기화 추가
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tm_models.dart';
 import 'cloud_sync_service.dart';
 
-const String _kWebhookUrlKey = 'webhook_url';
-const String _defaultWebhookUrl =
-    'https://script.google.com/macros/s/AKfycbwKc9CSfUrz5IDfCJctxeBa1inX0AtQXUbVd9yXJv7_ugVoenn17JY-EdsRXWiUYWikJA/exec';
+class SyncBatchResult {
+  final int success;
+  final int failed;
+  const SyncBatchResult({required this.success, required this.failed});
+}
 
 class WebhookSyncService implements CloudSyncService {
-  String? _webhookUrl;
-  final List<Map<String, dynamic>> _offlineQueue = [];
+  static const _defaultUrl =
+      'https://script.google.com/macros/s/AKfycbwKc9CSfUrz5IDfCJctxeBa1inX0AtQXUbVd9yXJv7_ugVoenn17JY-EdsRXWiUYWikJA/exec';
+  static const _prefKey = 'webhook_url';
+  static const _queueKey = 'offline_sync_queue';
 
+  // ─── URL 관리 ─────────────────────────────
   Future<String> getWebhookUrl() async {
-    if (_webhookUrl != null) return _webhookUrl!;
     final prefs = await SharedPreferences.getInstance();
-    _webhookUrl = prefs.getString(_kWebhookUrlKey) ?? _defaultWebhookUrl;
-    return _webhookUrl!;
+    return prefs.getString(_prefKey) ?? _defaultUrl;
   }
 
   Future<void> saveWebhookUrl(String url) async {
-    _webhookUrl = url;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kWebhookUrlKey, url);
+    await prefs.setString(_prefKey, url);
   }
 
-  Future<bool> _post(Map<String, dynamic> payload) async {
+  // ─── 시간 유틸: KST 포맷 문자열 반환 ────────
+  // DateTime.now()는 기기 로컬 시간(KST)을 반환
+  // ISO 8601 대신 "yyyy-MM-dd HH:mm:ss" 형식으로 전송 → Apps Script 재변환 없음
+  String _nowKst() {
+    final t = DateTime.now();
+    return '${t.year}-${_p(t.month)}-${_p(t.day)} '
+        '${_p(t.hour)}:${_p(t.minute)}:${_p(t.second)}';
+  }
+
+  String _p(int v) => v.toString().padLeft(2, '0');
+
+  // ─── HTTP POST (302 리다이렉트 처리) ─────────
+  Future<bool> _post(String url, Map<String, dynamic> payload) async {
     try {
-      final url = await getWebhookUrl();
-      if (url.isEmpty) return false;
-
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
-
-      final request = await client.postUrl(Uri.parse(url));
-      request.headers.set('Content-Type', 'application/json');
-      request.write(jsonEncode(payload));
-
-      final response = await request.close()
+      final resp = await http
+          .post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
           .timeout(const Duration(seconds: 15));
 
-      // 302 리다이렉트를 직접 따라가서 최종 응답 확인
-      if (response.statusCode == 302) {
-        final location = response.headers.value('location');
-        await response.drain();
-        client.close();
-
+      if (resp.statusCode == 302) {
+        final location = resp.headers['location'];
         if (location != null) {
-          final redirectClient = HttpClient();
-          redirectClient.connectionTimeout = const Duration(seconds: 15);
-          final redirectReq = await redirectClient.getUrl(Uri.parse(location));
-          final redirectRes = await redirectReq.close()
+          final r2 = await http
+              .post(
+                Uri.parse(location),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode(payload),
+              )
               .timeout(const Duration(seconds: 15));
-          final body = await redirectRes.transform(utf8.decoder).join();
-          redirectClient.close();
-          // {"status":"ok"} 이면 성공
-          return body.contains('"ok"') || redirectRes.statusCode == 200;
+          final body = r2.body.toLowerCase();
+          return r2.statusCode == 200 ||
+              body.contains('ok') ||
+              body.contains('success');
         }
-        return true; // location 헤더 없어도 302 자체로 성공 처리
       }
 
-      await response.drain();
-      client.close();
-      return response.statusCode == 200;
+      final body = resp.body.toLowerCase();
+      return resp.statusCode == 200 ||
+          body.contains('ok') ||
+          body.contains('success');
     } catch (e) {
+      debugPrint('WebhookSyncService._post error: $e');
       return false;
     }
   }
 
+  // ─── 단건 결과 동기화 ─────────────────────
   @override
   Future<void> syncResult({
     required String sessionId,
     required String sessionName,
     required TMContact contact,
   }) async {
+    final url = await getWebhookUrl();
     final payload = {
-      'type': 'syncResult',
+      'type': 'result',
+      'timestamp': _nowKst(),           // ✅ KST 로컬 시간 직접 전송
       'sessionId': sessionId,
       'sessionName': sessionName,
       'name': contact.name,
       'phone': contact.phone,
-      'resultCode': contact.resultCodes.isNotEmpty
-          ? contact.resultCodes.join(', ')
-          : '',
-      'grade': contact.customerGrade ?? '',
+      'resultCodes': contact.resultCodes.join(', '),
+      'customerGrade': contact.customerGrade ?? '',
       'memo': contact.memo ?? '',
-      'callDuration': contact.callDuration ?? 0,
-      'retryCount': contact.retryCount,
-      'isCompleted': contact.isCompleted,
+      'callDuration': contact.callDuration,
     };
 
-    final success = await _post(payload);
-    if (!success) {
-      _offlineQueue.add(payload);
+    final ok = await _post(url, payload);
+    if (!ok) {
+      await _enqueue(payload);
       throw Exception('Webhook POST failed – queued for retry');
     }
   }
 
+  // ─── 세션 동기화 ──────────────────────────
   @override
   Future<void> syncSession(TMSession session) async {
+    final url = await getWebhookUrl();
     final payload = {
-      'type': 'syncSession',
+      'type': 'session',
+      'timestamp': _nowKst(),
       'sessionId': session.id,
       'sessionName': session.name,
-      'totalContacts': session.totalContacts,
-      'completedCount': session.completedCount,
-      'isComplete': session.isComplete,
+      'totalContacts': session.contacts.length,
+      'completedContacts':
+          session.contacts.where((c) => c.isCompleted).length,
     };
-    await _post(payload);
+
+    final ok = await _post(url, payload);
+    if (!ok) {
+      await _enqueue(payload);
+      throw Exception('Webhook POST failed – queued for retry');
+    }
+  }
+
+  // ─── 배치 동기화 (수동 동기화 버튼용) ────────
+  Future<SyncBatchResult> syncBatch({
+    required String sessionId,
+    required String sessionName,
+    required List<TMContact> contacts,
+  }) async {
+    final url = await getWebhookUrl();
+    int success = 0;
+    int failed = 0;
+
+    for (final contact in contacts) {
+      final payload = {
+        'type': 'result',
+        'timestamp': _nowKst(),
+        'sessionId': sessionId,
+        'sessionName': sessionName,
+        'name': contact.name,
+        'phone': contact.phone,
+        'resultCodes': contact.resultCodes.join(', '),
+        'customerGrade': contact.customerGrade ?? '',
+        'memo': contact.memo ?? '',
+        'callDuration': contact.callDuration,
+      };
+
+      final ok = await _post(url, payload);
+      if (ok) {
+        success++;
+      } else {
+        failed++;
+        await _enqueue(payload);
+      }
+    }
+
+    return SyncBatchResult(success: success, failed: failed);
+  }
+
+  // ─── 오프라인 큐 ──────────────────────────
+  Future<void> _enqueue(Map<String, dynamic> payload) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_queueKey) ?? [];
+    list.add(jsonEncode(payload));
+    await prefs.setStringList(_queueKey, list);
+    debugPrint('Queued offline payload. Queue size: ${list.length}');
   }
 
   @override
   Future<void> flushOfflineQueue() async {
-    if (_offlineQueue.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_queueKey) ?? [];
+    if (list.isEmpty) return;
 
-    final toSend = List<Map<String, dynamic>>.from(_offlineQueue);
-    _offlineQueue.clear();
+    debugPrint('Flushing offline queue: ${list.length} items');
+    final url = await getWebhookUrl();
+    final remaining = <String>[];
 
-    for (final payload in toSend) {
-      final success = await _post(payload);
-      if (!success) {
-        _offlineQueue.add(payload); // 재실패 시 다시 큐에
-        break; // 네트워크 불안정 시 중단
+    for (final raw in list) {
+      try {
+        final payload = jsonDecode(raw) as Map<String, dynamic>;
+        final ok = await _post(url, payload);
+        if (!ok) remaining.add(raw);
+      } catch (e) {
+        remaining.add(raw);
       }
     }
+
+    await prefs.setStringList(_queueKey, remaining);
+    debugPrint('Queue flush done. Remaining: ${remaining.length}');
   }
 
-  int get offlineQueueCount => _offlineQueue.length;
+  // 큐 사이즈 조회
+  Future<int> getQueueSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_queueKey) ?? []).length;
+  }
 }

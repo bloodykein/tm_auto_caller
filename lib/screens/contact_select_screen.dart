@@ -16,12 +16,11 @@ class ContactSelectScreen extends StatefulWidget {
 class _ContactSelectScreenState extends State<ContactSelectScreen> {
   List<fc.Contact> _allContacts = [];
   List<fc.Contact> _filtered = [];
-  final Set<String> _selectedIds = {};
+  final Set<String> _selectedIds = {};   // flutter_contacts ID는 String
   final TextEditingController _searchController = TextEditingController();
   bool _loading = true;
   String _loadingMessage = '연락처 불러오는 중...';
   String? _errorMessage;
-  String _sessionName = '';
 
   @override
   void initState() {
@@ -55,7 +54,7 @@ class _ContactSelectScreenState extends State<ContactSelectScreen> {
 
       setState(() => _loadingMessage = '연락처 로딩 중... (잠시 기다려 주세요)');
 
-      // 2단계: 사진 없이 빠르게 로드 (핵심 수정)
+      // 2단계: 사진 없이 빠르게 로드 (핵심 최적화)
       final contacts = await fc.FlutterContacts.getContacts(
         withProperties: true,   // 전화번호 포함
         withPhoto: false,        // 사진 제외 → 속도 대폭 향상
@@ -148,32 +147,34 @@ class _ContactSelectScreenState extends State<ContactSelectScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    _sessionName = nameController.text.trim().isEmpty
+    final sessionName = nameController.text.trim().isEmpty
         ? '세션_${DateTime.now().millisecondsSinceEpoch}'
         : nameController.text.trim();
 
     final provider = Provider.of<TMProvider>(context, listen: false);
 
+    // flutter_contacts의 String ID → TMContact의 int id 변환
     final selectedContacts = _allContacts
         .where((c) => _selectedIds.contains(c.id))
         .map((c) => TMContact(
-              id: c.id,
+              id: int.tryParse(c.id) ?? c.id.hashCode, // ✅ String → int 변환
               name: c.displayName,
               phone: c.phones.first.number,
             ))
         .toList();
 
-    final session = await provider.startNewSession(
-      name: _sessionName,
+    await provider.startNewSession(
+      name: sessionName,
       contacts: selectedContacts,
     );
 
     if (!mounted) return;
 
+    // ✅ TMSessionScreen은 session 파라미터 없이 Provider에서 읽음
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => TMSessionScreen(session: session),
+        builder: (_) => const TMSessionScreen(),
       ),
     );
   }

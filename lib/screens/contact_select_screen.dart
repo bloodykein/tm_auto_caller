@@ -192,7 +192,6 @@ class _ContactSelectScreenState extends State<ContactSelectScreen> {
               onPressed: _selectAll,
               child: Text(
                 _selectedIds.length == _filtered.length ? '전체 해제' : '전체 선택',
-                style: const TextStyle(color: Colors.white),
               ),
             ),
         ],
